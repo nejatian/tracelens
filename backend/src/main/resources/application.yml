@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: tracelens-backend
+  servlet:
+    multipart:
+      max-file-size: 12MB
+      max-request-size: 128MB
+
+server:
+  port: 8080
+
+tracelens:
+  cors:
+    allowed-origin: http://localhost:3000
