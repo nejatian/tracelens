@@ -71,6 +71,8 @@ const SAMPLE_LOGS = [
   },
 ];
 
+const ANALYSIS_API_URL = process.env.NEXT_PUBLIC_ANALYSIS_API_URL ?? "http://localhost:8080";
+
 const STOP_WORDS = new Set([
   "the", "and", "that", "this", "with", "from", "while", "when", "what",
   "went", "wrong", "error", "failed", "failure", "service", "call", "some",
@@ -374,7 +376,7 @@ export default function Home() {
     setNotice("Demo loaded. Run the investigation to follow the failure across three services.");
   }
 
-  function runAnalysis() {
+  async function runAnalysis() {
     if (!files.length) {
       setNotice("Add at least one log file before starting the investigation.");
       return;
@@ -385,12 +387,48 @@ export default function Home() {
     }
     setIsAnalyzing(true);
     setNotice("");
-    window.setTimeout(() => {
+
+    if (process.env.NEXT_PUBLIC_ANALYSIS_ENGINE === "browser") {
       const next = analyzeFiles(files, clue, suspiciousCall);
       setResult(next);
       setIsAnalyzing(false);
       if (!next) setNotice("No readable log events were found in these files.");
-    }, 720);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => {
+        const type = file.name.toLowerCase().endsWith(".json") ? "application/json" : "text/plain";
+        formData.append("files", new Blob([file.content], { type }), file.name);
+      });
+      formData.append("clue", clue);
+      formData.append("suspiciousCall", suspiciousCall);
+
+      const response = await fetch(`${ANALYSIS_API_URL}/api/incidents/analyze`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let message = `The Java analysis service returned HTTP ${response.status}.`;
+        try {
+          const error = await response.json() as { message?: string };
+          if (error.message) message = error.message;
+        } catch {
+          // Keep the status-based message when the response has no JSON body.
+        }
+        throw new Error(message);
+      }
+
+      setResult(await response.json() as AnalysisResult);
+    } catch (error) {
+      setResult(null);
+      const detail = error instanceof Error ? error.message : "Unknown connection error.";
+      setNotice(`Java backend unavailable: ${detail} Start it from the backend directory with mvn spring-boot:run.`);
+    } finally {
+      setIsAnalyzing(false);
+    }
   }
 
   function resetInvestigation() {
@@ -407,10 +445,10 @@ export default function Home() {
         <div className="brand" aria-label="TraceLens home">
           <span className="brand-mark"><i /><i /><i /></span>
           <span>TraceLens</span>
-          <span className="beta">MVP</span>
+          <span className="beta">JAVA</span>
         </div>
         <div className="topbar-meta">
-          <span className="privacy"><span className="status-dot" /> Local analysis</span>
+          <span className="privacy"><span className="status-dot" /> Java engine · local</span>
           <button className="ghost-button" type="button" onClick={resetInvestigation}>New investigation</button>
         </div>
       </header>
@@ -490,7 +528,7 @@ export default function Home() {
 
           <div className="local-note">
             <span>⌁</span>
-            <p><strong>Your logs stay on this device.</strong> This MVP analyzes files in your browser and does not upload them.</p>
+            <p><strong>Your logs stay on this device.</strong> Files are sent only to the Java service running on your computer and are never stored.</p>
           </div>
         </aside>
 
@@ -618,7 +656,7 @@ export default function Home() {
                   <span>Services linked</span><strong>{result.serviceCount}</strong>
                 </div>
                 <div className="method-note">
-                  <span>Analysis method</span><strong>Trace correlation + root-signal ranking</strong>
+                  <span>Analysis method</span><strong>Java trace correlation + root-signal ranking</strong>
                 </div>
               </section>
             </div>
