@@ -22,7 +22,14 @@ npm ci
 npm run dev
 ```
 
-Open the local URL shown in the terminal.
+Open [http://localhost:3000](http://localhost:3000).
+
+## Production build
+
+```bash
+npm run build
+npm start
+```
 
 ## How it works
 
